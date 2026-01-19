@@ -1,0 +1,400 @@
+/*
+ * ESP32-S3-4848S040 Board Support Package - Implementation
+ *
+ * SPDX-FileCopyrightText: 2025 Hugo Trippaers
+ * SPDX-FileCopyrightText: 2026 Victor Arzolla
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * This file is derived from work originally licensed under Apache-2.0.
+ * Original source: https://github.com/spark404/esp32-4848S040-base
+ *
+ * Hardware initialization and abstraction for LCD display, touch panel,
+ * and LVGL graphics support on the ESP32-S3-4848S040 development board.
+ */
+
+/* =========================================================
+ *                  INCLUDES
+ * ========================================================= */
+#include <driver/gpio.h>
+#include <driver/i2c_master.h>
+#include <esp_lcd_panel_io_additions.h>
+#include <esp_lcd_panel_ops.h>
+#include <esp_lcd_st7701.h>
+#include <esp_lcd_touch_gt911.h>
+#include <esp_log.h>
+#include <esp_lvgl_port.h>
+
+#include "bsp.h"
+
+/* =========================================================
+ *                  PRIVATE DEFINES
+ * ========================================================= */
+#define TAG "BSP"
+
+#define GPIO_LCD_BL 38
+
+#define GPIO_LCD_SPI_CS 39
+#define GPIO_LCD_SPI_SCK 48
+#define GPIO_LCD_SPI_MOSI 47
+
+#define GPIO_LCD_DE 18
+#define GPIO_LCD_HSYNC 16
+#define GPIO_LCD_VSYNC 17
+#define GPIO_LCD_PCLK 21
+#define GPIO_LCD_DISP GPIO_NUM_NC
+
+#define GPIO_LCD_R0 11
+#define GPIO_LCD_R1 12
+#define GPIO_LCD_R2 13
+#define GPIO_LCD_R3 14
+#define GPIO_LCD_R4 0
+
+#define GPIO_LCD_G0 8
+#define GPIO_LCD_G1 20
+#define GPIO_LCD_G2 3
+#define GPIO_LCD_G3 46
+#define GPIO_LCD_G4 9
+#define GPIO_LCD_G5 10
+
+#define GPIO_LCD_B0 4
+#define GPIO_LCD_B1 5
+#define GPIO_LCD_B2 6
+#define GPIO_LCD_B3 7
+#define GPIO_LCD_B4 15
+
+#define GPIO_LCD_RST GPIO_NUM_NC
+
+#define GPIO_TP_SCL       45
+#define GPIO_TP_SDA       19
+#define GPIO_TP_INT       GPIO_NUM_NC // Not connected
+#define GPIO_TP_RST       GPIO_NUM_NC // Not connected
+
+#define LCD_BIT_PER_PIXEL 18
+#define LCD_H_RES 480
+#define LCD_V_RES 480
+
+#define GPIO_RELAY_1 40
+#define GPIO_RELAY_2 2
+#define GPIO_RELAY_3 1
+
+
+/* =========================================================
+ *                  PRIVATE CONSTANTS
+ * ========================================================= */
+
+static const st7701_lcd_init_cmd_t lcd_init_cmds[] = {
+    {0xFF, (uint8_t []){0x77, 0x01, 0x00, 0x00, 0x13}, 5, 0},
+    {0xEF, (uint8_t []){0x08}, 1, 0},
+
+    {0xFF, (uint8_t []){0x77, 0x01, 0x00, 0x00, 0x10}, 5, 0},
+    {0xC0, (uint8_t []){0x3B, 0x00}, 2, 0},
+    {0xC1, (uint8_t []){0x0D, 0x02}, 2, 0},
+    {0xC2, (uint8_t []){0x21, 0x08}, 2, 0},
+    {0xCD, (uint8_t []){0x00}, 1, 0}, // MDT
+    {
+        0xB0,
+        (uint8_t []){
+            0x00, 0x11, 0x18, 0x0E, 0x11, 0x06, 0x07, 0x08, 0x07, 0x22, 0x04, 0x12, 0x0F, 0xAA, 0x31, 0x18
+        },
+        16, 0
+    },
+    {
+        0xB1,
+        (uint8_t []){
+            0x00, 0x11, 0x19, 0x0E, 0x12, 0x07, 0x08, 0x08, 0x08, 0x22, 0x04, 0x11, 0x11, 0xA9, 0x32, 0x18
+        },
+        16, 0
+    },
+
+    {0xFF, (uint8_t []){0x77, 0x01, 0x00, 0x00, 0x11}, 5, 0},
+    {0xB0, (uint8_t []){0x60}, 1, 0}, // Vop=4.7375v
+    {0xB1, (uint8_t []){0x30}, 1, 0},
+    {0xB2, (uint8_t []){0x87}, 1, 0},
+    {0xB3, (uint8_t []){0x80}, 1, 0},
+    {0xB5, (uint8_t []){0x49}, 1, 0}, // VGL=-10.17v
+    {0xB7, (uint8_t []){0x85}, 1, 0},
+    {0xB8, (uint8_t []){0x21}, 1, 0}, // AVDD=6.6 & AVCL=-4.6
+    {0xC1, (uint8_t []){0x78}, 1, 0},
+    {0xC2, (uint8_t []){0x78}, 1, 20},
+    {0xE0, (uint8_t []){0x00, 0x1B, 0x02}, 3, 0},
+    {0xE1, (uint8_t []){0x08, 0xA0, 0x00, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x00, 0x44, 0x44}, 11, 0},
+    {0xE2, (uint8_t []){0x11, 0x11, 0x44, 0x44, 0xED, 0xA0, 0x00, 0x00, 0xEC, 0xA0, 0x00, 0x00}, 12, 0},
+    {0xE3, (uint8_t []){0x00, 0x00, 0x11, 0x11}, 4, 0},
+    {0xE4, (uint8_t []){0x44, 0x44}, 2, 0},
+    {
+        0xE5,
+        (uint8_t []){
+            0x0A, 0xE9, 0xD8, 0xA0, 0x0C, 0xEB, 0xD8, 0xA0, 0x0E, 0xED, 0xD8, 0xA0, 0x10, 0xEF, 0xD8, 0xA0
+        },
+        16, 0
+    },
+    {0xE6, (uint8_t []){0x00, 0x00, 0x11, 0x11}, 4, 0},
+    {0xE7, (uint8_t []){0x44, 0x44}, 2, 0},
+    {
+        0xE8,
+        (uint8_t []){
+            0x09, 0xE8, 0xD8, 0xA0, 0x0B, 0xEA, 0xD8, 0xA0, 0x0D, 0xEC, 0xD8, 0xA0, 0x0F, 0xEE, 0xD8, 0xA0
+        },
+        16, 0
+    },
+    {0xEB, (uint8_t []){0x02, 0x00, 0xE4, 0xE4, 0x88, 0x00, 0x40}, 7, 0},
+    {0xEC, (uint8_t []){0x3C, 0x00}, 2, 0},
+    {
+        0xED,
+        (uint8_t []){
+            0xAB, 0x89, 0x76, 0x54, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x20, 0x45, 0x67, 0x98, 0xBA
+        },
+        16, 0
+    },
+
+    {0xFF, (uint8_t []){0x77, 0x01, 0x00, 0x00, 0x00}, 5, 0},
+
+    {0x11, NULL, 0, 120},
+    {0x29, NULL, 0, 0}, // Display On
+};
+
+/* =========================================================
+ *                  PRIVATE VARIABLES
+ * ========================================================= */
+static lv_disp_t * disp_handle = NULL;
+static lv_indev_t* touch_handle = NULL;
+
+
+/* =========================================================
+ *                  PRIVATE FUNCTIONS
+ * ========================================================= */
+
+esp_err_t bsp_init_lcd_backlight(void)
+{
+    ESP_LOGI(TAG, "Initialize LCD backlight");
+    const gpio_config_t bk_gpio_config = {
+        .mode = GPIO_MODE_OUTPUT,
+        .pin_bit_mask = 1ULL << GPIO_LCD_BL
+    };
+    ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
+    ESP_ERROR_CHECK(gpio_set_level(GPIO_LCD_BL, 0));
+    return ESP_OK;
+}
+
+esp_err_t bsp_enable_lcd_backlight(void)
+{
+    return gpio_set_level(GPIO_LCD_BL, 1);
+}
+
+esp_err_t bsp_init_lcd_panel(esp_lcd_panel_io_handle_t *io_handle, 
+                              esp_lcd_panel_handle_t *panel_handle)
+{
+    ESP_LOGI(TAG, "Initialize 3-wire SPI");
+    spi_line_config_t line_config = {
+        .cs_io_type = IO_TYPE_GPIO,
+        .cs_gpio_num = GPIO_LCD_SPI_CS,
+        .scl_io_type = IO_TYPE_GPIO,
+        .scl_gpio_num = GPIO_LCD_SPI_SCK,
+        .sda_io_type = IO_TYPE_GPIO,
+        .sda_gpio_num = GPIO_LCD_SPI_MOSI,
+        .io_expander = NULL,
+    };
+    esp_lcd_panel_io_3wire_spi_config_t io_config = ST7701_PANEL_IO_3WIRE_SPI_CONFIG(line_config, 0);
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_3wire_spi(&io_config, io_handle));
+
+    ESP_LOGI(TAG, "Initialize ST7701 driver");
+    esp_lcd_rgb_panel_config_t rgb_config = {
+        .clk_src = LCD_CLK_SRC_PLL160M,
+        .timings = ST7701_480_480_PANEL_60HZ_RGB_TIMING(),
+        .data_width = 16,
+        .bits_per_pixel = 16,
+        .dma_burst_size = 64,
+        .hsync_gpio_num = GPIO_LCD_HSYNC,
+        .vsync_gpio_num = GPIO_LCD_VSYNC,
+        .de_gpio_num = GPIO_LCD_DE,
+        .pclk_gpio_num = GPIO_LCD_PCLK,
+        .disp_gpio_num = GPIO_LCD_DISP,
+        .data_gpio_nums = {
+            GPIO_LCD_R0,
+            GPIO_LCD_R1,
+            GPIO_LCD_R2,
+            GPIO_LCD_R3,
+            GPIO_LCD_R4,
+            GPIO_LCD_G0,
+            GPIO_LCD_G1,
+            GPIO_LCD_G2,
+            GPIO_LCD_G3,
+            GPIO_LCD_G4,
+            GPIO_LCD_G5,
+            GPIO_LCD_B0,
+            GPIO_LCD_B1,
+            GPIO_LCD_B2,
+            GPIO_LCD_B3,
+            GPIO_LCD_B4,
+        },
+        
+        .flags = {
+            .disp_active_low = 0,
+            .refresh_on_demand = 0,
+            .fb_in_psram = 1,
+            .double_fb = 0,
+            .no_fb = 0,
+            .bb_invalidate_cache = 0
+        },
+        .num_fbs = 2,
+        .bounce_buffer_size_px = LCD_H_RES * 10
+    };
+
+    st7701_vendor_config_t vendor_config = {
+        .rgb_config = &rgb_config,
+        .init_cmds = lcd_init_cmds,
+        .init_cmds_size = sizeof(lcd_init_cmds) / sizeof(st7701_lcd_init_cmd_t),
+        .flags = {
+            .mirror_by_cmd = 1,
+            .enable_io_multiplex = 0,
+        },
+    };
+
+    const esp_lcd_panel_dev_config_t panel_config = {
+        .reset_gpio_num = GPIO_LCD_RST,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
+        .bits_per_pixel = LCD_BIT_PER_PIXEL,
+        .vendor_config = &vendor_config,
+    };
+
+    ESP_ERROR_CHECK(esp_lcd_new_panel_st7701(*io_handle, &panel_config, panel_handle));
+    ESP_ERROR_CHECK(esp_lcd_panel_reset(*panel_handle));
+    ESP_ERROR_CHECK(esp_lcd_panel_init(*panel_handle));
+
+    return ESP_OK;
+}
+
+esp_err_t bsp_init_lvgl(lv_disp_t **disp_handle, esp_lcd_panel_io_handle_t io_handle,
+                         esp_lcd_panel_handle_t panel_handle)
+{
+    ESP_LOGI(TAG, "Initialize LVGL");
+    const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    ESP_ERROR_CHECK(lvgl_port_init(&lvgl_cfg));
+
+    const lvgl_port_display_cfg_t disp_cfg = {
+        .io_handle = io_handle,
+        .panel_handle = panel_handle,
+        .double_buffer = true,
+        .buffer_size = LCD_H_RES * LCD_V_RES,
+        .hres = LCD_H_RES,
+        .vres = LCD_V_RES,
+        .monochrome = false,
+        .color_format = LV_COLOR_FORMAT_RGB565,
+        .rotation = {
+            .swap_xy = false,
+            .mirror_x = false,
+            .mirror_y = false,
+        },
+        .flags = {
+            .buff_dma = true,
+            .swap_bytes = false,
+            .buff_spiram = true,
+            .full_refresh = false,
+            .direct_mode = true
+        }
+    };
+
+    const lvgl_port_display_rgb_cfg_t rgb_cfg = {
+        .flags = {
+            .bb_mode = true,
+            .avoid_tearing = true,
+        }
+    };
+
+    *disp_handle = lvgl_port_add_disp_rgb(&disp_cfg, &rgb_cfg);
+    if (*disp_handle == NULL) {
+        ESP_LOGE(TAG, "Unable to setup display");
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t bsp_init_touch(lv_indev_t **touch_handle, lv_disp_t *disp_handle)
+{
+    ESP_LOGI(TAG, "Initialize touch panel");
+
+    i2c_master_bus_handle_t tp_bus_handle = NULL;
+    i2c_master_bus_config_t i2c_mst_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = -1,
+        .scl_io_num = GPIO_TP_SCL,
+        .sda_io_num = GPIO_TP_SDA,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
+
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &tp_bus_handle));
+
+    esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
+    tp_io_config.scl_speed_hz = 400000;
+
+    esp_lcd_panel_io_handle_t tp_io_handle = NULL;
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(tp_bus_handle, &tp_io_config, &tp_io_handle));
+
+    esp_lcd_touch_io_gt911_config_t tp_gt911_config = {
+        .dev_addr = tp_io_config.dev_addr,
+    };
+
+    esp_lcd_touch_config_t tp_cfg = {
+        .x_max = LCD_V_RES,
+        .y_max = LCD_H_RES,
+        .rst_gpio_num = GPIO_TP_RST,
+        .int_gpio_num = GPIO_TP_INT,
+        .levels = {
+            .reset = 0,
+            .interrupt = 0,
+        },
+        .flags = {
+            .swap_xy = 0,
+            .mirror_x = 0,
+            .mirror_y = 0,
+        },
+        .driver_data = &tp_gt911_config
+    };
+
+    esp_lcd_touch_handle_t tp = NULL;
+    ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &tp));
+
+    const lvgl_port_touch_cfg_t touch_cfg = {
+        .disp = disp_handle,
+        .handle = tp,
+    };
+
+    *touch_handle = lvgl_port_add_touch(&touch_cfg);
+    if (*touch_handle == NULL) {
+        ESP_LOGE(TAG, "Unable to setup touchpad");
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+
+/* =========================================================
+ *                  PUBLIC API
+ * ========================================================= */
+esp_err_t bsp_init(void)
+{
+    ESP_LOGI(TAG, "Initialize BSP");
+
+    // Initialize LCD backlight
+    ESP_ERROR_CHECK(bsp_init_lcd_backlight());
+
+    // Initialize LCD panel
+    esp_lcd_panel_io_handle_t io_handle = NULL;
+    esp_lcd_panel_handle_t panel_handle = NULL;
+    ESP_ERROR_CHECK(bsp_init_lcd_panel(&io_handle, &panel_handle));
+
+    // Initialize LVGL
+    ESP_ERROR_CHECK(bsp_init_lvgl(&disp_handle, io_handle, panel_handle));
+
+    // Enable backlight
+    ESP_ERROR_CHECK(bsp_enable_lcd_backlight());
+
+    // Initialize touch panel
+    ESP_ERROR_CHECK(bsp_init_touch(&touch_handle, disp_handle));
+
+    return ESP_OK;
+}

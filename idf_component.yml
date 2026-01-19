@@ -1,0 +1,16 @@
+version: "0.1.0"
+description: Board Support Package (BSP) for Guition ESP32-S3-4848S040
+url: https://github.com/arzolla/esp32_s3_4848S040
+
+targets:
+  - esp32s3
+
+tags:
+  - bsp
+
+dependencies:
+  idf: ">=5.5"
+  espressif/esp_lvgl_port: "^2.5.0"
+  espressif/esp_lcd_st7701: "^1.1.1"
+  espressif/esp_lcd_touch_gt911: "^1.1.2"
+  espressif/esp_lcd_panel_io_additions: "^1.0.0"
