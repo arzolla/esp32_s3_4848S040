@@ -1,5 +1,7 @@
-version: "0.1.0"
-description: Board Support Package (BSP) for Guition ESP32-S3-4848S040
+version: "0.3.0"
+description: >
+  Board Support Package (BSP) for Guition ESP32-S3-4848S040
+  based on Espressif official BSP for ESP32-S3-LCD-EV-BOARD.
 url: https://github.com/arzolla/esp32_s3_4848S040
 
 targets:
