@@ -279,15 +279,6 @@ esp_err_t bsp_init(void)
         return ret;
     }
 
-    // Initialize LVGL
-    ESP_LOGI(TAG, "Initializing LVGL");
-    const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
-    ret = lvgl_port_init(&lvgl_cfg);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize LVGL port: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
     /* ================================================
      *  STEP 3: Initialize LVGL graphics library
      * ================================================ */
@@ -319,7 +310,7 @@ esp_err_t bsp_init(void)
             .buff_dma = true,
             .swap_bytes = false,
             .buff_spiram = true,
-            .full_refresh = false,
+            .full_refresh = true,
             .direct_mode = true
         }
     };
