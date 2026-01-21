@@ -21,7 +21,7 @@
 #include <esp_log.h>
 #include <esp_lvgl_port.h>
 
-#include "bsp.h"
+#include "bsp/esp-bsp.h"
 
 /* =========================================================
  *                  DEFINES
