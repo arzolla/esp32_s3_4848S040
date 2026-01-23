@@ -126,28 +126,6 @@ static lv_display_t *disp = NULL;
 static lv_indev_t *disp_indev = NULL;
 
 /* =========================================================
- *                  BACKLIGHT FUNCTIONS
- * ========================================================= */
-
-esp_err_t bsp_display_backlight_on(void)
-{
-    esp_err_t ret = gpio_set_level(BSP_LCD_BACKLIGHT_GPIO, 1);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to enable backlight: %s", esp_err_to_name(ret));
-    }
-    return ret;
-}
-
-esp_err_t bsp_display_backlight_off(void)
-{
-    esp_err_t ret = gpio_set_level(BSP_LCD_BACKLIGHT_GPIO, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to disable backlight: %s", esp_err_to_name(ret));
-    }
-    return ret;
-}
-
-/* =========================================================
  *                  LVGL LOCK/UNLOCK FUNCTIONS
  * ========================================================= */
 
@@ -405,6 +383,31 @@ esp_err_t bsp_init(void)
     return ESP_OK;
 }
 
+/* =========================================================
+ *                  BACKLIGHT CONTROL API
+ * ========================================================= */
+
+esp_err_t bsp_display_backlight_on(void)
+{
+    esp_err_t ret = gpio_set_level(BSP_LCD_BACKLIGHT_GPIO, 1);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to enable backlight: %s", esp_err_to_name(ret));
+    }
+    return ret;
+}
+
+esp_err_t bsp_display_backlight_off(void)
+{
+    esp_err_t ret = gpio_set_level(BSP_LCD_BACKLIGHT_GPIO, 0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to disable backlight: %s", esp_err_to_name(ret));
+    }
+    return ret;
+}
+
+/* =========================================================
+ *                  INITIALIZATION API
+ * ========================================================= */
 lv_display_t *bsp_display_start(void)
 {
     if (bsp_init() != ESP_OK) {
