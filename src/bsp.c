@@ -172,7 +172,7 @@ esp_err_t bsp_init(void)
     esp_err_t ret = ESP_OK;
 
     /* ================================================
-     *  STEP 1: Initialize LCD backlight GPIO
+     *  Initialize LCD backlight GPIO
      * ================================================ */
     ESP_LOGI(TAG, "Initializing LCD backlight");
     const gpio_config_t bk_gpio_config = {
@@ -192,7 +192,7 @@ esp_err_t bsp_init(void)
     }
 
     /* ================================================
-     *  STEP 2: Initialize LCD panel
+     *  Initialize LCD panel
      * ================================================ */
     ESP_LOGI(TAG, "Initializing 3-wire SPI");
     /* Configure SPI line: CS, SCL (clock), SDA (data) */
@@ -280,7 +280,7 @@ esp_err_t bsp_init(void)
     }
 
     /* ================================================
-     *  STEP 3: Initialize LVGL graphics library
+     *  Initialize LVGL graphics library
      * ================================================ */
     ESP_LOGI(TAG, "Initializing LVGL");
     /* Initialize LVGL port with default configuration */
@@ -329,17 +329,9 @@ esp_err_t bsp_init(void)
         return ESP_FAIL;
     }
 
-    /* ================================================
-     *  STEP 4: Enable LCD backlight
-     * ================================================ */
-    ret = gpio_set_level(BSP_LCD_BACKLIGHT_GPIO, 1);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to enable backlight: %s", esp_err_to_name(ret));
-        return ret;
-    }
 
     /* ================================================
-     *  STEP 5: Initialize touch panel
+     *  Initialize touch panel
      * ================================================ */
     ESP_LOGI(TAG, "Initializing touch panel");
     /* Create I2C master bus for touch controller */
