@@ -259,57 +259,6 @@ esp_err_t bsp_display_backlight_off(void);
 /** @} */ // end of BSP_DISPLAY_BACKLIGHT
 
 /* =========================================================
- *                  HANDLE GETTER API
- * ========================================================= */
-
-/** \addtogroup BSP_DISPLAY_GETTERS
- *  @brief Get hardware handles after initialization
- *  @{
- */
-
-/**
- * @brief Get LVGL display handle
- *
- * @return Pointer to LVGL display or NULL if not initialized
- *
- * @see bsp_display_start()
- * @see bsp_init()
- */
-lv_display_t *bsp_display_get_handle(void);
-
-/**
- * @brief Get LVGL touch input device handle
- *
- * @return Pointer to LVGL input device or NULL if not initialized
- *
- * @see bsp_display_start()
- * @see bsp_init()
- */
-lv_indev_t *bsp_touch_get_handle(void);
-
-/**
- * @brief Get LCD panel handle
- *
- * @return Pointer to LCD panel handle or NULL if not initialized
- *
- * @see bsp_display_start()
- * @see bsp_init()
- */
-esp_lcd_panel_handle_t bsp_display_get_panel_handle(void);
-
-/**
- * @brief Get LCD panel IO handle
- *
- * @return Pointer to LCD panel IO handle or NULL if not initialized
- *
- * @see bsp_display_start()
- * @see bsp_init()
- */
-esp_lcd_panel_io_handle_t bsp_display_get_io_handle(void);
-
-/** @} */ // end of BSP_DISPLAY_GETTERS
-
-/* =========================================================
  *                  LVGL SYNCHRONIZATION API
  * ========================================================= */
 
