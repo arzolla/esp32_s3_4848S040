@@ -1,4 +1,4 @@
-version: "0.3.0"
+version: "0.4.0"
 description: >
   Board Support Package (BSP) for Guition ESP32-S3-4848S040
   based on Espressif official BSP for ESP32-S3-LCD-EV-BOARD.

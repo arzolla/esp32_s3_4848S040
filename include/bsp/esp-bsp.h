@@ -10,7 +10,9 @@
 
 #pragma once
 
-#include <esp_err.h>
+/* =========================================================
+ *                  INCLUDES
+ * ========================================================= */
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <lvgl.h>
@@ -39,23 +41,23 @@ extern "C" {
  */
 #define BSP_CAPS_DISPLAY                1
 #define BSP_CAPS_TOUCH                  1
-#define BSP_CAPS_BACKLIGHT              1
+
 /** @} */
 
 /** @} */ // end of BSP_BOARD
 
 /* =========================================================
- *                  LCD BACKLIGHT PINS
+ *                  LCD BACKLIGHT
  * ========================================================= */
 
 /**
  * @defgroup BSP_LCD_BACKLIGHT LCD Backlight
- * @brief LCD backlight GPIO
+ * @brief LCD backlight control configuration
  * @{
  */
 
 #define BSP_LCD_BACKLIGHT_GPIO          38
-
+#define LCD_LEDC_CH                     LEDC_CHANNEL_0
 /** @} */ // end of BSP_LCD_BACKLIGHT
 
 /* =========================================================
@@ -239,9 +241,9 @@ lv_display_t *bsp_display_start(void);
  *
  * @return
  *      - ESP_OK:   Backlight enabled
- *      - ESP_FAIL: GPIO operation failed
+ *      - ESP_FAIL: Error
  *
- * @see bsp_display_backlight_off()
+ * @see bsp_display_brightness_set()
  */
 esp_err_t bsp_display_backlight_on(void);
 
@@ -250,11 +252,22 @@ esp_err_t bsp_display_backlight_on(void);
  *
  * @return
  *      - ESP_OK:   Backlight disabled
- *      - ESP_FAIL: GPIO operation failed
+ *      - ESP_FAIL: Error
  *
- * @see bsp_display_backlight_on()
+ * @see bsp_display_brightness_set()
  */
 esp_err_t bsp_display_backlight_off(void);
+
+/**
+ * @brief Set LCD backlight brightness
+ *
+ * @param[in] brightness_percent Brightness in percent (0-100)
+ *
+ * @return
+ *      - ESP_OK:   Successfully set brightness
+ *      - ESP_FAIL: Error
+ */
+esp_err_t bsp_display_brightness_set(int brightness_percent);
 
 /** @} */ // end of BSP_DISPLAY_BACKLIGHT
 

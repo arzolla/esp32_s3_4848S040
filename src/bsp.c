@@ -14,12 +14,17 @@
  * ========================================================= */
 #include <driver/gpio.h>
 #include <driver/i2c_master.h>
+#include <driver/ledc.h>
 #include <esp_lcd_panel_io_additions.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_st7701.h>
 #include <esp_lcd_touch_gt911.h>
 #include <esp_log.h>
 #include <esp_lvgl_port.h>
+
+#include "esp_err.h"
+#include "esp_log.h"
+#include "esp_check.h"
 
 #include "bsp/esp-bsp.h"
 
@@ -140,6 +145,36 @@ void bsp_display_unlock(void)
 }
 
 /* =========================================================
+ *                  BRIGHTNESS CONTROL
+ * ========================================================= */
+
+esp_err_t bsp_display_brightness_init(void)
+{
+    // Setup LEDC peripheral for PWM backlight control
+    const ledc_channel_config_t LCD_backlight_channel = {
+        .gpio_num = BSP_LCD_BACKLIGHT_GPIO,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = LCD_LEDC_CH,
+        .intr_type = LEDC_INTR_DISABLE,
+        .timer_sel = 1,
+        .duty = 0,
+        .hpoint = 0
+    };
+    const ledc_timer_config_t LCD_backlight_timer = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_10_BIT,
+        .timer_num = 1,
+        .freq_hz = 200,
+        .clk_cfg = LEDC_AUTO_CLK
+    };
+
+    ESP_ERROR_CHECK(ledc_timer_config(&LCD_backlight_timer));
+    ESP_ERROR_CHECK(ledc_channel_config(&LCD_backlight_channel));
+
+    return ESP_OK;
+}
+
+/* =========================================================
  *                  INITIALIZATION FUNCTIONS
  * ========================================================= */
 
@@ -150,24 +185,11 @@ esp_err_t bsp_init(void)
     esp_err_t ret = ESP_OK;
 
     /* ================================================
-     *  Initialize LCD backlight GPIO
+     *  Initialize LCD backlight brightness control
      * ================================================ */
-    ESP_LOGI(TAG, "Initializing LCD backlight");
-    const gpio_config_t bk_gpio_config = {
-        .mode = GPIO_MODE_OUTPUT,
-        .pin_bit_mask = 1ULL << BSP_LCD_BACKLIGHT_GPIO
-    };
-    ret = gpio_config(&bk_gpio_config);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure backlight GPIO: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    /* Set backlight to disabled initially */
-    ret = gpio_set_level(BSP_LCD_BACKLIGHT_GPIO, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set backlight level: %s", esp_err_to_name(ret));
-        return ret;
-    }
+    ESP_LOGI(TAG, "Initializing LCD backlight brightness control");
+    ESP_RETURN_ON_ERROR(bsp_display_brightness_init(), TAG, "Brightness init failed");
+
 
     /* ================================================
      *  Initialize LCD panel
@@ -387,27 +409,37 @@ esp_err_t bsp_init(void)
  *                  BACKLIGHT CONTROL API
  * ========================================================= */
 
-esp_err_t bsp_display_backlight_on(void)
+esp_err_t bsp_display_brightness_set(int brightness_percent)
 {
-    esp_err_t ret = gpio_set_level(BSP_LCD_BACKLIGHT_GPIO, 1);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to enable backlight: %s", esp_err_to_name(ret));
+    if (brightness_percent > 100) {
+        brightness_percent = 100;
     }
-    return ret;
+    if (brightness_percent < 0) {
+        brightness_percent = 0;
+    }
+
+    ESP_LOGI(TAG, "Setting LCD backlight: %d%%", brightness_percent);
+    uint32_t duty_cycle = (1023 * (brightness_percent)) / 100; // LEDC resolution set to 10bits, thus: 100% = 1023
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LCD_LEDC_CH, duty_cycle));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LCD_LEDC_CH));
+
+    return ESP_OK;
 }
 
 esp_err_t bsp_display_backlight_off(void)
 {
-    esp_err_t ret = gpio_set_level(BSP_LCD_BACKLIGHT_GPIO, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to disable backlight: %s", esp_err_to_name(ret));
-    }
-    return ret;
+    return bsp_display_brightness_set(0);
+}
+
+esp_err_t bsp_display_backlight_on(void)
+{
+    return bsp_display_brightness_set(100);
 }
 
 /* =========================================================
  *                  INITIALIZATION API
  * ========================================================= */
+
 lv_display_t *bsp_display_start(void)
 {
     if (bsp_init() != ESP_OK) {

@@ -9,4 +9,5 @@ idf_component_register(
                         esp_driver_i2c
                         esp_lcd_st7701
                         esp_lcd_touch_gt911
+                        esp_driver_ledc
 )       
