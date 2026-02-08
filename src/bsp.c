@@ -287,12 +287,11 @@ esp_err_t bsp_display_init(void)
 /* ================================================
 *  Initialize LVGL graphics library
 * ================================================ */
-esp_err_t bsp_lvgl_init(void){
+esp_err_t bsp_lvgl_init(const lvgl_port_cfg_t *lvgl_port_cfg){
 
     ESP_LOGI(TAG, "Initializing LVGL");
-    /* Initialize LVGL port with default configuration */
-    const lvgl_port_cfg_t lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
-    ESP_RETURN_ON_ERROR(lvgl_port_init(&lvgl_port_cfg), TAG, "Failed to initialize LVGL port: %s");
+
+    ESP_RETURN_ON_ERROR(lvgl_port_init(lvgl_port_cfg), TAG, "Failed to initialize LVGL port: %s");
 
     return ESP_OK;
 }
@@ -410,12 +409,11 @@ void bsp_display_unlock(void)
  *                  INITIALIZATION API
  * ========================================================= */
 
-lv_display_t *bsp_display_start(void)
+lv_display_t *bsp_display_start_with_config(const bsp_display_cfg_t *cfg)
 {
-
     ESP_LOGI(TAG, "Initializing BSP");
 
-    bsp_lvgl_init();
+    bsp_lvgl_init(&(cfg->lvgl_port_cfg));
     bsp_display_init();
     bsp_display_brightness_init();
     bsp_touch_init();
@@ -423,4 +421,15 @@ lv_display_t *bsp_display_start(void)
     ESP_LOGI(TAG, "BSP initialized successfully");
 
     return disp;
+}
+
+lv_display_t *bsp_display_start(void)
+{
+    /* Initialize LVGL port with default configuration */
+    bsp_display_cfg_t cfg = {
+        .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG()
+    };
+
+    return bsp_display_start_with_config(&cfg);
+
 }

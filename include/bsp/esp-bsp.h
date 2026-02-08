@@ -16,6 +16,7 @@
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <lvgl.h>
+#include <esp_lvgl_port.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -175,6 +176,16 @@ extern "C" {
 
 /** @} */ // end of BSP_LVGL
 
+/**
+ * @brief BSP display configuration structure
+ *
+ */
+typedef struct {
+    lvgl_port_cfg_t lvgl_port_cfg;
+} bsp_display_cfg_t;
+
+
+
 /* =========================================================
  *                  INITIALIZATION API
  * ========================================================= */
@@ -188,9 +199,6 @@ extern "C" {
 /**
  * @brief Initialize display and return LVGL display handle
  *
- * This is a convenience function that calls bsp_init() and returns
- * the LVGL display handle. Equivalent to calling bsp_init() followed
- * by bsp_display_get_handle().
  *
  * @return
  *      - Pointer to LVGL display on success
@@ -198,10 +206,22 @@ extern "C" {
  *
  * @note This is the recommended function for typical LVGL applications
  *
- * @see bsp_init()
- * @see bsp_display_get_handle()
  */
 lv_display_t *bsp_display_start(void);
+
+
+/**
+ * @brief Initialize display with custom configuration and return LVGL display handle
+ *
+ * @param cfg Display configuration
+ * 
+ * @return
+ *      - Pointer to LVGL display on success
+ *      - NULL on failure
+ *
+ */
+lv_display_t *bsp_display_start_with_config(const bsp_display_cfg_t *cfg);
+
 
 /** @} */ // end of BSP_INIT
 
