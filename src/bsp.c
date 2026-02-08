@@ -130,26 +130,15 @@ static lv_display_t *disp = NULL;
  */
 static lv_indev_t *disp_indev = NULL;
 
-/* =========================================================
- *                  LVGL LOCK/UNLOCK FUNCTIONS
- * ========================================================= */
-
-bool bsp_display_lock(uint32_t timeout_ms)
-{
-    return lvgl_port_lock(timeout_ms);
-}
-
-void bsp_display_unlock(void)
-{
-    lvgl_port_unlock();
-}
 
 /* =========================================================
- *                  BRIGHTNESS CONTROL
- * ========================================================= */
+*  Initialize LCD backlight brightness control 
+* ========================================================= */
 
 esp_err_t bsp_display_brightness_init(void)
 {
+    ESP_LOGI(TAG, "Initializing LCD backlight brightness control");
+
     // Setup LEDC peripheral for PWM backlight control
     const ledc_channel_config_t LCD_backlight_channel = {
         .gpio_num = BSP_LCD_BACKLIGHT_GPIO,
@@ -174,26 +163,12 @@ esp_err_t bsp_display_brightness_init(void)
     return ESP_OK;
 }
 
-/* =========================================================
- *                  INITIALIZATION FUNCTIONS
- * ========================================================= */
-
-esp_err_t bsp_init(void)
+/* ================================================
+*  Initialize LCD panel
+* ================================================ */
+esp_err_t bsp_display_init(void)
 {
-    ESP_LOGI(TAG, "Initializing BSP");
 
-    esp_err_t ret = ESP_OK;
-
-    /* ================================================
-     *  Initialize LCD backlight brightness control
-     * ================================================ */
-    ESP_LOGI(TAG, "Initializing LCD backlight brightness control");
-    ESP_RETURN_ON_ERROR(bsp_display_brightness_init(), TAG, "Brightness init failed");
-
-
-    /* ================================================
-     *  Initialize LCD panel
-     * ================================================ */
     ESP_LOGI(TAG, "Initializing 3-wire SPI");
     /* Configure SPI line: CS, SCL (clock), SDA (data) */
     spi_line_config_t line_config = {
@@ -208,11 +183,11 @@ esp_err_t bsp_init(void)
 
     esp_lcd_panel_io_3wire_spi_config_t io_config = ST7701_PANEL_IO_3WIRE_SPI_CONFIG(line_config, 0);
     esp_lcd_panel_io_handle_t io_handle = NULL;
-    ret = esp_lcd_new_panel_io_3wire_spi(&io_config, &io_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create panel IO: %s", esp_err_to_name(ret));
-        return ret;
-    }
+
+
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_3wire_spi(&io_config, &io_handle),TAG, "Failed to create panel IO: %s");
+
+
 
     ESP_LOGI(TAG, "Initializing ST7701 driver");
     esp_lcd_rgb_panel_config_t rgb_config = {
@@ -261,35 +236,14 @@ esp_err_t bsp_init(void)
     };
 
     esp_lcd_panel_handle_t panel_handle = NULL;
-    ret = esp_lcd_new_panel_st7701(io_handle, &panel_config, &panel_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create panel: %s", esp_err_to_name(ret));
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_st7701(io_handle, &panel_config, &panel_handle), TAG, "Failed to create panel: %s");
 
-    ret = esp_lcd_panel_reset(panel_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to reset panel: %s", esp_err_to_name(ret));
-        return ret;
-    }
 
-    ret = esp_lcd_panel_init(panel_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize panel: %s", esp_err_to_name(ret));
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(panel_handle), TAG, "Failed to reset panel: %s");
 
-    /* ================================================
-     *  Initialize LVGL graphics library
-     * ================================================ */
-    ESP_LOGI(TAG, "Initializing LVGL");
-    /* Initialize LVGL port with default configuration */
-    const lvgl_port_cfg_t lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
-    ret = lvgl_port_init(&lvgl_port_cfg);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize LVGL port: %s", esp_err_to_name(ret));
-        return ret;
-    }
+
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_init(panel_handle), TAG, "Failed to initialize panel: %s");
+
 
     /* Configure LVGL display with RGB panel and PSRAM buffer */
     const lvgl_port_display_cfg_t disp_cfg = {
@@ -323,16 +277,31 @@ esp_err_t bsp_init(void)
     };
 
     /* Add RGB display to LVGL */
-    disp = lvgl_port_add_disp_rgb(&disp_cfg, &rgb_cfg);
-    if (disp == NULL) {
-        ESP_LOGE(TAG, "Failed to setup LVGL display");
-        return ESP_FAIL;
-    }
+    ESP_RETURN_ON_FALSE(disp = lvgl_port_add_disp_rgb(&disp_cfg, &rgb_cfg), ESP_FAIL, TAG, "Failed to setup LVGL display");
 
 
-    /* ================================================
-     *  Initialize touch panel
-     * ================================================ */
+    return ESP_OK;
+
+}
+
+/* ================================================
+*  Initialize LVGL graphics library
+* ================================================ */
+esp_err_t bsp_lvgl_init(void){
+
+    ESP_LOGI(TAG, "Initializing LVGL");
+    /* Initialize LVGL port with default configuration */
+    const lvgl_port_cfg_t lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    ESP_RETURN_ON_ERROR(lvgl_port_init(&lvgl_port_cfg), TAG, "Failed to initialize LVGL port: %s");
+
+    return ESP_OK;
+}
+
+/* ================================================
+*  Initialize touch panel
+* ================================================ */
+esp_err_t bsp_touch_init(void){
+
     ESP_LOGI(TAG, "Initializing touch panel");
     /* Create I2C master bus for touch controller */
     i2c_master_bus_handle_t tp_bus_handle = NULL;
@@ -346,21 +315,15 @@ esp_err_t bsp_init(void)
         .flags.enable_internal_pullup = true,
     };
 
-    ret = i2c_new_master_bus(&i2c_mst_config, &tp_bus_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create I2C master bus: %s", esp_err_to_name(ret));
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&i2c_mst_config, &tp_bus_handle), TAG, "Failed to create I2C master bus: %s");
+
 
     esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
     tp_io_config.scl_speed_hz = BSP_TOUCH_I2C_CLK_HZ;
 
     esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-    ret = esp_lcd_new_panel_io_i2c(tp_bus_handle, &tp_io_config, &tp_io_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create touch IO: %s", esp_err_to_name(ret));
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_i2c(tp_bus_handle, &tp_io_config, &tp_io_handle), TAG, "Failed to create touch IO: %s");
+
 
     esp_lcd_touch_io_gt911_config_t tp_gt911_config = {
         .dev_addr = tp_io_config.dev_addr,
@@ -384,24 +347,16 @@ esp_err_t bsp_init(void)
     };
 
     esp_lcd_touch_handle_t tp = NULL;
-    ret = esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &tp);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create touch controller: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
+    ESP_RETURN_ON_ERROR(esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &tp), TAG, "Failed to create touch controller: %s");
+ 
     const lvgl_port_touch_cfg_t touch_cfg = {
         .disp = disp,
         .handle = tp,
     };
 
-    disp_indev = lvgl_port_add_touch(&touch_cfg);
-    if (disp_indev == NULL) {
-        ESP_LOGE(TAG, "Failed to setup touch input device");
-        return ESP_FAIL;
-    }
+    ESP_RETURN_ON_FALSE(disp_indev = lvgl_port_add_touch(&touch_cfg), ESP_FAIL, TAG, "Failed to setup touch input device");
+  
 
-    ESP_LOGI(TAG, "BSP initialized successfully");
     return ESP_OK;
 }
 
@@ -437,13 +392,35 @@ esp_err_t bsp_display_backlight_on(void)
 }
 
 /* =========================================================
+ *                  LVGL LOCK/UNLOCK API
+ * ========================================================= */
+
+bool bsp_display_lock(uint32_t timeout_ms)
+{
+    return lvgl_port_lock(timeout_ms);
+}
+
+void bsp_display_unlock(void)
+{
+    lvgl_port_unlock();
+}
+
+
+/* =========================================================
  *                  INITIALIZATION API
  * ========================================================= */
 
 lv_display_t *bsp_display_start(void)
 {
-    if (bsp_init() != ESP_OK) {
-        return NULL;
-    }
+
+    ESP_LOGI(TAG, "Initializing BSP");
+
+    bsp_lvgl_init();
+    bsp_display_init();
+    bsp_display_brightness_init();
+    bsp_touch_init();
+
+    ESP_LOGI(TAG, "BSP initialized successfully");
+
     return disp;
 }

@@ -184,28 +184,6 @@ extern "C" {
  *  @{
  */
 
-/**
- * @brief Initialize all BSP components
- *
- * Performs complete hardware initialization in the following order:
- *  1. LCD backlight GPIO configuration (disabled)
- *  2. LCD panel with ST7701 driver initialization
- *  3. LVGL graphics library setup
- *  4. LCD backlight enable
- *  5. Touch panel (GT911) initialization
- *
- * @return
- *      - ESP_OK:   All components initialized successfully
- *      - ESP_FAIL: One or more components failed. Check logs for details.
- *
- * @note This is the main initialization function for typical usage
- * @note Call bsp_display_lock()/bsp_display_unlock() before using LVGL API
- *
- * @see bsp_display_start()
- * @see bsp_display_lock()
- * @see bsp_display_unlock()
- */
-esp_err_t bsp_init(void);
 
 /**
  * @brief Initialize display and return LVGL display handle
